@@ -43,11 +43,13 @@ pub trait Normalize {
     }
 
     fn as_const(&self) -> String {
-        self.as_str().to_case(Case::UpperSnake)
+        escape_reserved_word(&self.as_str().to_case(Case::UpperSnake))
     }
 
     fn as_namespace(&self) -> String {
-        self.as_str().to_case(Case::Pascal)
+        let base_name = self.as_str();
+        let ns_name = format!("{}_n",base_name);
+        ns_name.as_str().to_case(Case::Pascal)
     }
 }
 
@@ -65,16 +67,30 @@ pub trait ToLanguageRepresentation {
     }
 
     fn as_lang(&self) -> String {
+        self.as_lang_with_parent(None)
+    }
+
+    fn as_lang_with_parent(&self, parent_type: Option<&ASType>) -> String {
         match self.as_astype() {
             ASType::Alias(alias) => alias.name.as_type(),
             ASType::Bool => "bool".to_string(),
-            ASType::Char32 => "Char32".to_string(),
-            ASType::Char8 => "Char8".to_string(),
+            ASType::Char32 => "string".to_string(),
+            ASType::Char8 => "string".to_string(),
             ASType::F32 => "f32".to_string(),
             ASType::F64 => "f64".to_string(),
-            ASType::Handle(_resource_name) => "WasiHandle".to_string(),
-            ASType::ConstPtr(pointee) => format!("WasiPtr<{}>", pointee.to_string()),
-            ASType::MutPtr(pointee) => format!("WasiMutPtr<{}>", pointee.to_string()),
+            ASType::Handle(_resource_name) => "Handle".to_string(),
+            ASType::ConstPtr(pointee) => {
+                match parent_type {
+                    Some(ASType::Struct(_s)) => {format!("usize")}
+                    _ => {format!("ptr<{}>", pointee.to_string())}
+                }
+            },
+            ASType::MutPtr(pointee) => {
+                match parent_type {
+                    Some(ASType::Struct(_s)) => {format!("usize")}
+                    _ => {format!("mutptr<{}>", pointee.to_string())}
+                }
+            }
             ASType::Option(_) => todo!(),
             ASType::Result(_) => todo!(),
             ASType::S8 => "i8".to_string(),
@@ -94,11 +110,33 @@ pub trait ToLanguageRepresentation {
             ASType::Struct(_) => unimplemented!(),
             ASType::Tuple(tuple_members) => Tuple::name_for(tuple_members).as_type(),
             ASType::Union(_) => unimplemented!(),
-            ASType::Slice(element_type) => format!("WasiMutSlice<{}>", element_type.as_lang()),
+            ASType::Slice(element_type) => {
+                match parent_type {
+                    Some(t) => {
+                        // this is only called in the case for typescript
+                        format!("usize")
+                    }
+                    None => { format!("WasiMutSlice<{}>", element_type.as_lang()) }
+                }
+            }
             ASType::String(_) => "WasiString".to_string(),
-            ASType::ReadBuffer(element_type) => format!("WasiSlice<{}>", element_type.as_lang()),
+            ASType::ReadBuffer(element_type) => {
+                match parent_type {
+                    Some(t) => {
+                        // this is only called in the case for typescript
+                        format!("usize")
+                    }
+                    None => { format!("WasiSlice<{}>", element_type.as_lang()) }
+                }
+            }
             ASType::WriteBuffer(element_type) => {
-                format!("WasiMutSlice<{}>", element_type.to_string())
+                match parent_type {
+                    Some(t) => {
+                        // this is only called in the case for typescript
+                        format!("usize")
+                    }
+                    None => { format!("WasiMutSlice<{}>", element_type.as_lang()) }
+                }
             }
         }
     }
@@ -111,12 +149,17 @@ impl ToLanguageRepresentation for ASType {
 }
 
 pub fn escape_reserved_word(word: &str) -> String {
-    if RESERVED.iter().any(|k| *k == word) {
-        // If the camel-cased string matched any strict or reserved keywords, then
-        // append a trailing underscore to the identifier we generate.
-        format!("{}_", word)
+    //if word starts_with a digit
+    if word.as_bytes()[0].is_ascii_digit() {
+        format!("E_{}", word)
     } else {
-        word.to_string() // Otherwise, use the string as is.
+        if RESERVED.iter().any(|k| *k == word) {
+            // If the camel-cased string matched any strict or reserved keywords, then
+            // append a trailing underscore to the identifier we generate.
+            format!("{}_", word)
+        } else {
+            word.to_string() // Otherwise, use the string as is.
+        }
     }
 }
 

@@ -19,6 +19,7 @@ pub struct ASStructMember {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ASEnumChoice {
     pub name: String,
+    pub docs: String,
     pub value: usize,
 }
 
@@ -69,6 +70,7 @@ pub struct ASResult {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ASConstant {
     pub name: String,
+    pub docs: String,
     pub value: u64,
 }
 
@@ -162,14 +164,15 @@ impl From<&witx::Type> for ASType {
             }
             witx::Type::Handle(handle_data_type) => {
                 // data type doesn't seem to be used for anything
-                let resource_name = handle_data_type.resource_id.name.as_str().to_string();
+                //let resource_name = handle_data_type.resource_id.name.as_str().to_string();
+                let resource_name = "handle".to_string();
                 ASType::Handle(resource_name)
             }
             witx::Type::Record(record) if record.is_tuple() =>
             // Tuple
             {
                 let mut tuple_members = vec![];
-                let layout_witx = &record.member_layout(true);
+                let layout_witx = &record.member_layout();
                 for member_witx in layout_witx {
                     let member_tref = &member_witx.member.tref;
                     let member_offset = member_witx.offset;
@@ -188,7 +191,7 @@ impl From<&witx::Type> for ASType {
                 };
                 for (i, member_witx) in layout_witx.iter().enumerate().take(n) {
                     let member_tref = &member_witx.member.tref;
-                    let member_size = member_tref.mem_size(true);
+                    let member_size = member_tref.mem_size();
                     let member_padding =
                         layout_witx[i + 1].offset - member_witx.offset - member_size;
                     tuple_members[i].padding = member_padding;
@@ -199,7 +202,7 @@ impl From<&witx::Type> for ASType {
             // Struct
             {
                 let mut struct_members = vec![];
-                let layout_witx = &record.member_layout(true);
+                let layout_witx = &record.member_layout();
                 for member_witx in layout_witx {
                     let member_name = member_witx.member.name.as_str().to_string();
                     let member_tref = &member_witx.member.tref;
@@ -220,7 +223,7 @@ impl From<&witx::Type> for ASType {
                 };
                 for (i, member_witx) in layout_witx.iter().enumerate().take(n) {
                     let member_tref = &member_witx.member.tref;
-                    let member_size = member_tref.mem_size(true);
+                    let member_size = member_tref.mem_size();
                     let member_padding =
                         layout_witx[i + 1].offset - member_witx.offset - member_size;
                     struct_members[i].padding = member_padding;
@@ -232,10 +235,13 @@ impl From<&witx::Type> for ASType {
             {
                 let mut constants = vec![];
                 let constants_repr = ASType::from(record.bitflags_repr().unwrap());
-                for (idx, contants_witx) in record.member_layout(true).iter().enumerate() {
+                for (idx, contants_witx) in record.member_layout().iter().enumerate() {
                     let constant_name = contants_witx.member.name.as_str().to_string();
+                    let docs = contants_witx.member.docs.as_str().to_string();
+
                     let constant = ASConstant {
                         name: constant_name,
+                        docs: docs,
                         value: 1u64 << idx,
                     };
                     constants.push(constant);
@@ -253,15 +259,18 @@ impl From<&witx::Type> for ASType {
             witx::Type::Variant(variant)
                 if (variant.is_enum() || variant.is_bool())
                     && variant.as_expected().is_none()
-                    && variant.as_option().is_none() =>
+                    //&& variant.as_option().is_none() =>
+                    =>
             // Enum
             {
                 let enum_repr = ASType::from(variant.tag_repr);
                 let mut choices = vec![];
                 for (idx, choice_witx) in variant.cases.iter().enumerate() {
                     let choice_name = choice_witx.name.as_str().to_string();
+                    let choice_docs = choice_witx.docs.as_str().to_string();
                     let choice = ASEnumChoice {
                         name: choice_name,
+                        docs: choice_docs,
                         value: idx,
                     };
                     choices.push(choice);
@@ -281,12 +290,13 @@ impl From<&witx::Type> for ASType {
                     })
                 }
             }
-            witx::Type::Variant(variant)
-                if variant.as_expected().is_none() && variant.as_option().is_some() =>
+            /*witx::Type::Variant(variant)
+                //if variant.as_expected().is_none() && variant.as_option().is_some() =>
+                if variant.as_expected().is_none() =>
             // Option
             {
                 let tag_repr = ASType::from(variant.tag_repr);
-                let option_offset = variant.payload_offset(true);
+                let option_offset = variant.payload_offset();
                 assert_eq!(variant.cases.len(), 1);
                 let option_tref = &variant.cases[0].tref;
                 let option_type = match &option_tref {
@@ -298,13 +308,14 @@ impl From<&witx::Type> for ASType {
                     offset: option_offset,
                     type_: Rc::new(option_type),
                 })
-            }
+            }*/
             witx::Type::Variant(variant)
-                if variant.as_expected().is_some() && variant.as_option().is_none() =>
+                //if variant.as_expected().is_some() && variant.as_option().is_none() =>
+                if variant.as_expected().is_some() =>
             // Result
             {
                 let tag_repr = ASType::from(variant.tag_repr);
-                let result_offset = variant.payload_offset(true);
+                let result_offset = variant.payload_offset();
                 assert_eq!(variant.cases.len(), 2);
                 assert_eq!(variant.cases[0].name, "ok");
                 assert_eq!(variant.cases[1].name, "err");
@@ -318,8 +329,8 @@ impl From<&witx::Type> for ASType {
                     None => ASType::Void,
                     Some(type_witx) => ASType::from(type_witx),
                 };
-                let full_size = variant.mem_size(true);
-                let tag_size = variant.tag_repr.mem_size(true);
+                let full_size = variant.mem_size();
+                let tag_size = variant.tag_repr.mem_size();
                 let padding_after_tag = full_size - tag_size;
                 ASType::Result(ASResult {
                     tag_repr: Rc::new(tag_repr),
@@ -332,8 +343,22 @@ impl From<&witx::Type> for ASType {
             witx::Type::Variant(variant) =>
             // Tagged Union
             {
-                let tag_repr = ASType::from(variant.tag_repr);
-                let member_offset = variant.payload_offset(true);
+                //println!("variant: {:?}", variant);
+                //let tag_repr = ASType::from(variant.tag_repr);
+                /*if (variant.tag_type.is_some()) {
+                    witx::Type::into(self)
+                    tag_repr = ASType::from(variant.tag_type.unwrap());
+                }*/
+                let tag_repr = match variant.tag_type.as_ref() {
+                    None => ASType::from(variant.tag_repr),
+                    Some(type_witx) => ASType::from(type_witx),
+                };
+
+                //println!("tag_repr: {:?}", tag_repr);
+                //let tag_type = variant.tag_type.clone();
+                //println!("tag_type: {:?}", tag_type);
+
+                let member_offset = variant.payload_offset();
                 let mut members = vec![];
                 for member_witx in &variant.cases {
                     let member_name = member_witx.name.as_str().to_string();
@@ -347,8 +372,8 @@ impl From<&witx::Type> for ASType {
                     };
                     members.push(member);
                 }
-                let full_size = variant.mem_size(true);
-                let tag_size = variant.tag_repr.mem_size(true);
+                let full_size = variant.mem_size();
+                let tag_size = variant.tag_repr.mem_size();
                 let padding_after_tag = full_size - tag_size;
                 let max_member_size = full_size - member_offset;
                 ASType::Union(ASUnion {
@@ -368,14 +393,14 @@ impl From<&witx::Type> for ASType {
                     _ => ASType::Slice(Rc::new(elements_type)),
                 }
             }
-            witx::Type::Buffer(buffer) if buffer.out => {
+            /*witx::Type::Buffer(buffer) if buffer.out => {
                 let elements_type = ASType::from(&buffer.tref);
                 ASType::WriteBuffer(Rc::new(elements_type))
             }
             witx::Type::Buffer(buffer) => {
                 let elements_typ = ASType::from(&buffer.tref);
                 ASType::ReadBuffer(Rc::new(elements_typ))
-            }
+            }*/
         }
     }
 }

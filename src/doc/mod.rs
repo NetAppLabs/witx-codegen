@@ -27,74 +27,79 @@ impl<T: Write> Generator<T> for DocGenerator {
     fn generate(
         &self,
         writer: &mut T,
-        module_witx: witx::Module,
+        doc_witx: witx::Document,
         options: &Options,
     ) -> Result<(), Error> {
-        let mut w = PrettyWriter::new(writer, "* ");
-        let module_name = match &self.module_name {
-            None => module_witx.name().as_str().to_string(),
-            Some(module_name) => module_name.to_string(),
-        };
-        let module_id = module_witx.module_id();
-        let skip_imports = options.skip_imports;
+        for module_witx in doc_witx.modules() {
+            let mut w = PrettyWriter::new(&mut *writer, "* ");
+            let module_name = match &self.module_name {
+                None => module_witx.name.as_str().to_string(),
+                Some(module_name) => module_name.to_string(),
+            };
+            let module_id = module_witx.name.as_str();
+            let skip_imports = options.skip_imports;
 
-        if !options.skip_header {
-            Self::header(&mut w)?;
-        }
-
-        let module_title_doc = format!("# Module: {}", module_name);
-        w.eob()?;
-        w.write_line(module_title_doc)?;
-        w.eob()?;
-
-        w.write_line("## Table of contents")?.eob()?;
-        w.write_line("### Types list:")?.eob()?;
-        w.write("[**[All](#types)**]")?;
-        for type_ in module_witx.typenames() {
-            if skip_imports && &type_.module != module_id {
-                continue;
+            if !options.skip_header {
+                Self::header(&mut w)?;
             }
-            let type_name = type_.name.as_str();
-            w.write(format!(" - [{}]", type_name.as_type()))?;
-        }
-        w.eol()?.eob()?;
-        w.write_line("### Functions list:")?.eob()?;
-        w.write("[**[All](#functions)**]")?;
-        for func in module_witx.funcs() {
-            let func_name = func.name.as_str();
-            w.write(format!(" - [{}]", func_name.as_fn()))?;
-        }
-        w.eol()?.eob()?;
 
-        w.write_line("## Types")?.eob()?;
+            let module_title_doc = format!("# Module: {}", module_name);
+            w.eob()?;
+            w.write_line(module_title_doc)?;
+            w.eob()?;
 
-        for type_ in module_witx.typenames() {
-            if skip_imports && &type_.module != module_id {
-                continue;
+            w.write_line("## Table of contents")?.eob()?;
+            w.write_line("### Types list:")?.eob()?;
+            w.write("[**[All](#types)**]")?;
+            for type_ in doc_witx.typenames() {
+                //if skip_imports && &type_.module != module_id {
+                if skip_imports {
+                    continue;
+                }
+                let type_name = type_.name.as_str();
+                w.write(format!(" - [{}]", type_name.as_type()))?;
             }
-            let constants_for_type: Vec<_> = module_witx
-                .constants()
-                .into_iter()
-                .filter_map(|x| {
-                    if x.ty == type_.name {
-                        Some(ASConstant {
-                            name: x.name.as_str().to_string(),
-                            value: x.value,
-                        })
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-            Self::define_type(&mut w, type_.as_ref(), &constants_for_type)?;
+            w.eol()?.eob()?;
+            w.write_line("### Functions list:")?.eob()?;
+            w.write("[**[All](#functions)**]")?;
+            for func in module_witx.funcs() {
+                let func_name = func.name.as_str();
+                w.write(format!(" - [{}]", func_name.as_fn()))?;
+            }
+            w.eol()?.eob()?;
+
+            w.write_line("## Types")?.eob()?;
+
+            for type_ in doc_witx.typenames() {
+                //if skip_imports && &type_.module != module_id {
+                if skip_imports {
+                    continue;
+                }
+                let constants_for_type: Vec<_> = doc_witx
+                    .constants()
+                    .into_iter()
+                    .filter_map(|x| {
+                        if x.ty == type_.name {
+                            let docs = x.docs.as_str().to_string();
+                            Some(ASConstant {
+                                name: x.name.as_str().to_string(),
+                                docs: docs,
+                                value: x.value,
+                            })
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+                Self::define_type(&mut w, type_.as_ref(), &constants_for_type)?;
+            }
+
+            w.write_line("## Functions")?.eob()?;
+
+            for func in module_witx.funcs() {
+                Self::define_func(&mut w, &module_name, func.as_ref())?;
+            }
         }
-
-        w.write_line("## Functions")?.eob()?;
-
-        for func in module_witx.funcs() {
-            Self::define_func(&mut w, &module_name, func.as_ref())?;
-        }
-
         Ok(())
     }
 }

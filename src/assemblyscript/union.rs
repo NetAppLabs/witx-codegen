@@ -4,128 +4,198 @@ use super::*;
 
 impl AssemblyScriptGenerator {
     fn define_union_member_accessors<T: Write>(
+        &self,
         w: &mut PrettyWriter<T>,
         union_name: &str,
         i: usize,
         member: &ASUnionMember,
     ) -> Result<(), Error> {
-        let member_type = member.type_.as_ref();
-        match member_type {
-            ASType::Void => {
-                w.write_line(format!(
-                    "static {}(): {} {{",
-                    member.name.as_fn(),
-                    union_name.as_type()
-                ))?
-                .indent()?
-                .write_line(format!("return {}.new({});", union_name.as_type(), i))?
-                .write_line("}")?
-                .eob()?;
-
-                w.write_line(format!("set{}(): void {{", member.name.as_fn_suffix()))?
+        if self.typescript_mode {
+            unreachable!()
+        } else {
+            let member_type = member.type_.as_ref();
+            match member_type {
+                ASType::Void => {
+                    w.write_line(format!(
+                        "static {}(): {} {{",
+                        member.name.as_fn(),
+                        union_name.as_type()
+                    ))?
                     .indent()?
-                    .write_line(format!("this.tag = {};", i))?
+                    .write_line(format!("return {}.new({});", union_name.as_type(), i))?
                     .write_line("}")?
                     .eob()?;
 
-                w.write_line(format!("is{}(): bool {{", member.name.as_fn_suffix()))?
-                    .indent()?
-                    .write_line(format!("return this.tag === {};", i))?
-                    .write_line("}")?;
-            }
-            _ => {
-                w.write_line(format!(
-                    "static {}(val: {}): {} {{",
-                    member.name.as_fn(),
-                    member_type.as_lang(),
-                    union_name.as_type()
-                ))?;
-                w.new_block().write_line(format!(
-                    "return {}.new({}, val);",
-                    union_name.as_type(),
-                    i
-                ))?;
-                w.write_line("}")?.eob()?;
-
-                w.write_line(format!(
-                    "set{}(val: {}): void {{",
-                    member.name.as_fn_suffix(),
-                    member_type.as_lang()
-                ))?;
-                {
-                    w.new_block()
+                    w.write_line(format!("set{}(): void {{", member.name.as_fn_suffix()))?
+                        .indent()?
                         .write_line(format!("this.tag = {};", i))?
-                        .write_line("this.set(val);")?;
+                        .write_line("}")?
+                        .eob()?;
+
+                    w.write_line(format!("is{}(): bool {{", member.name.as_fn_suffix()))?
+                        .indent()?
+                        .write_line(format!("return this.tag === {};", i))?
+                        .write_line("}")?;
                 }
-                w.write_line("}")?.eob()?;
-
-                w.write_line(format!("is{}(): bool {{", member.name.as_fn_suffix(),))?
-                    .indent()?
-                    .write_line(format!("return this.tag === {};", i))?
-                    .write_line("}")?
-                    .eob()?;
-
-                if member_type.is_nullable() {
+                _ => {
                     w.write_line(format!(
-                        "get{}(): {} | null {{",
+                        "static {}(val: {}): {} {{",
+                        member.name.as_fn(),
+                        member_type.as_lang(),
+                        union_name.as_type()
+                    ))?;
+                    w.new_block().write_line(format!(
+                        "return {}.new({}, val);",
+                        union_name.as_type(),
+                        i
+                    ))?;
+                    w.write_line("}")?.eob()?;
+
+                    w.write_line(format!(
+                        "set{}(val: {}): void {{",
                         member.name.as_fn_suffix(),
                         member_type.as_lang()
                     ))?;
-                } else {
-                    w.write_line(format!(
-                        "get{}(): {} {{",
-                        member.name.as_fn_suffix(),
-                        member_type.as_lang()
-                    ))?;
-                }
-                {
-                    let mut w = w.new_block();
-                    if member_type.is_nullable() {
-                        w.write_line(format!("if (this.tag !== {}) {{ return null; }}", i))?;
+                    {
+                        w.new_block()
+                            .write_line(format!("this.tag = {};", i))?
+                            .write_line("this.set(val);")?;
                     }
-                    w.write_line(format!("return this.get<{}>();", member_type.as_lang()))?;
+                    w.write_line("}")?.eob()?;
+
+                    w.write_line(format!("is{}(): bool {{", member.name.as_fn_suffix(),))?
+                        .indent()?
+                        .write_line(format!("return this.tag === {};", i))?
+                        .write_line("}")?
+                        .eob()?;
+
+                    if member_type.is_nullable() {
+                        w.write_line(format!(
+                            "get{}(): {} | null {{",
+                            member.name.as_fn_suffix(),
+                            member_type.as_lang()
+                        ))?;
+                    } else {
+                        w.write_line(format!(
+                            "get{}(): {} {{",
+                            member.name.as_fn_suffix(),
+                            member_type.as_lang()
+                        ))?;
+                    }
+                    {
+                        let mut w = w.new_block();
+                        if member_type.is_nullable() {
+                            w.write_line(format!("if (this.tag !== {}) {{ return null; }}", i))?;
+                        }
+                        w.write_line(format!("return this.get<{}>();", member_type.as_lang()))?;
+                    }
+                    w.write_line("}")?;
                 }
-                w.write_line("}")?;
             }
         }
         Ok(())
     }
 
     fn define_union_member<T: Write>(
+        &self,
         w: &mut PrettyWriter<T>,
         union_name: &str,
+        union_: &ASUnion,
         i: usize,
         member: &ASUnionMember,
     ) -> Result<(), Error> {
-        let member_type = member.type_.as_ref();
-        match member_type {
-            ASType::Void => {
-                w.write_line(format!(
-                    "// --- {}: (no associated content) if tag={}",
-                    member.name.as_var(),
-                    i
-                ))?;
+        if self.typescript_mode {
+            let member_type = member.type_.as_ref();
+            //println!("member_type: {:?}", member_type);
+
+            match member_type {
+                ASType::Void => {
+                    w.write_line(format!(
+                        "[{}]: null,",
+                        member.name.as_var(),
+                    ))?;
+                }
+                _ => {
+                    // union tag not visible from witx crate, defaults to number:
+                    w.write_line(format!(
+                        "[{}.{}]: {},",
+                        union_.tag_repr.to_string().as_namespace(),
+                        member.name.as_const(),
+                        member_type.as_lang(),
+                    ))?;
+                }
             }
-            _ => {
-                w.write_line(format!(
-                    "// --- {}: {} if tag={}",
-                    member.name.as_var(),
-                    member_type.as_lang(),
-                    i
-                ))?;
+        } else {
+            let member_type = member.type_.as_ref();
+            match member_type {
+                ASType::Void => {
+                    w.write_line(format!(
+                        "// --- {}: (no associated content) if tag={}",
+                        member.name.as_var(),
+                        i
+                    ))?;
+                }
+                _ => {
+                    w.write_line(format!(
+                        "// --- {}: {} if tag={}",
+                        member.name.as_var(),
+                        member_type.as_lang(),
+                        i
+                    ))?;
+                }
             }
+            w.eob()?;
+            Self::define_union_member_accessors(&self, w, union_name, i, member)?;
         }
-        w.eob()?;
-        Self::define_union_member_accessors(w, union_name, i, member)?;
         Ok(())
     }
 
     pub fn define_as_union<T: Write>(
+        &self,
+        w: &mut PrettyWriter<T>,
+        name: &str,
+        union_: &ASUnion,
+    ) -> Result<(), Error> {
+        if self.typescript_mode {
+            Self::define_as_union_typescript(&self, w, name, union_)
+        } else {
+            Self::define_as_union_assemblyscript(&self, w, name, union_)
+        }
+    }
+
+    pub fn define_as_union_typescript<T: Write>(
+        &self,
         w: &mut PrettyWriter<T>,
         name: &str,
         union_: &ASUnion,
     ) -> Result<(), Error> {
         let tag_repr = union_.tag_repr.as_ref();
+        w.write_line(format!("export const {} = taggedUnion({{", name.as_type()))?;
+        {
+            let mut w = w.new_block();
+            w.write_line(format!("tag: {},", tag_repr.as_lang()))?;
+            w.write_line(format!("data: {{"))?;
+            let mut w = w.new_block();
+
+            for (i, member) in union_.members.iter().enumerate() {
+                Self::define_union_member(&self, &mut w, name, &union_, i, member)?;
+            }
+            w.write_line(format!("}},"))?;
+        }
+        w.write_line("});")?;
+        w.write_line(format!("export type {} = TargetType<typeof {}>;", name.as_type(),name.as_type()))?.eob()?;
+        Ok(())
+    }
+
+    pub fn define_as_union_assemblyscript<T: Write>(
+        &self,
+        w: &mut PrettyWriter<T>,
+        name: &str,
+        union_: &ASUnion,
+    ) -> Result<(), Error> {
+        let tag_repr = union_.tag_repr.as_ref();
+        //println!("tag_repr: {:?}", tag_repr);
+
         w.write_line("// @ts-ignore: decorator")?
             .write_line("@unmanaged")?
             .write_line(format!("export class {} {{", name.as_type()))?;
@@ -211,7 +281,7 @@ impl AssemblyScriptGenerator {
 
             for (i, member) in union_.members.iter().enumerate() {
                 w.eob()?;
-                Self::define_union_member(&mut w, name, i, member)?;
+                Self::define_union_member(&self, &mut w, name, union_, i, member)?;
             }
         }
         w.write_line("}")?.eob()?;

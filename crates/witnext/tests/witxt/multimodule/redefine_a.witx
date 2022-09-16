@@ -1,0 +1,4 @@
+(module $redefine_a
+  (use $a from $type_a)
+  (typename $a u8)
+)

@@ -1,4 +1,4 @@
-use std::io::Write;
+use std::{io::Write, rc::Rc};
 
 use super::*;
 
@@ -6,7 +6,7 @@ impl RustGenerator {
     pub fn define_func<T: Write>(
         w: &mut PrettyWriter<T>,
         module_name: &str,
-        func_witx: &witx::Function,
+        func_witx: &witx::InterfaceFunc,
     ) -> Result<(), Error> {
         assert_eq!(func_witx.abi, witx::Abi::Preview1);
         let name = func_witx.name.as_str().to_string();
@@ -19,44 +19,52 @@ impl RustGenerator {
         }
 
         let results_witx = &func_witx.results;
-        assert_eq!(results_witx.len(), 1);
-        let result_witx = &results_witx[0];
-        let result = ASType::from(&result_witx.tref);
-        let result = match result {
-            ASType::Result(result) => result,
-            _ => unreachable!(),
-        };
-
-        let ok_type = result.ok_type.clone();
-
-        let docs = &func_witx.docs;
-        if !docs.is_empty() {
-            Self::write_docs(w, docs)?;
-        }
-
+        //assert_eq!(results_witx.len(), 1);
         let mut params_decomposed = vec![];
-
-        for param in &params {
-            let mut decomposed = param.1.decompose(&param.0, false);
-            params_decomposed.append(&mut decomposed);
-        }
-
-        let mut results = vec![];
-        // A tuple in a result is expanded into additional parameters, transformed to
-        // pointers
-        if let ASType::Tuple(tuple_members) = ok_type.as_ref().leaf() {
-            for (i, tuple_member) in tuple_members.iter().enumerate() {
-                let name = format!("result{}_ptr", i);
-                results.push((name, tuple_member.type_.clone()));
-            }
-        } else {
-            let name = "result_ptr";
-            results.push((name.to_string(), ok_type));
-        }
         let mut results_decomposed = vec![];
-        for result in &results {
-            let mut decomposed = result.1.decompose(&result.0, true);
-            results_decomposed.append(&mut decomposed);
+
+        let mut results:Vec<(String,Rc<ASType>)> = vec![];
+        let mut o_result: Option<ASResult>  = None;
+
+        if results_witx.len() > 0{
+
+            let result_witx = &results_witx[0];
+            let result = ASType::from(&result_witx.tref);
+            let result = match result {
+                ASType::Result(result) => result,
+                _ => unreachable!(),
+            };
+
+            let ok_type = result.ok_type.clone();
+            o_result = Some(result);
+
+            let docs = &func_witx.docs;
+            if !docs.is_empty() {
+                Self::write_docs(w, docs)?;
+            }
+
+
+            for param in &params {
+                let mut decomposed = param.1.decompose(&param.0, false);
+                params_decomposed.append(&mut decomposed);
+            }
+
+            let mut results = vec![];
+            // A tuple in a result is expanded into additional parameters, transformed to
+            // pointers
+            if let ASType::Tuple(tuple_members) = ok_type.as_ref().leaf() {
+                for (i, tuple_member) in tuple_members.iter().enumerate() {
+                    let name = format!("result{}_ptr", i);
+                    results.push((name, tuple_member.type_.clone()));
+                }
+            } else {
+                let name = "result_ptr";
+                results.push((name.to_string(), ok_type));
+            }
+            for result in &results {
+                let mut decomposed = result.1.decompose(&result.0, true);
+                results_decomposed.append(&mut decomposed);
+            }
         }
 
         Self::define_func_raw(
@@ -65,11 +73,14 @@ impl RustGenerator {
             &name,
             &params_decomposed,
             &results_decomposed,
-            &result,
+            &o_result,
         )?;
 
-        let signature_witx = func_witx.wasm_signature(witx::CallMode::DefinedImport);
-        let params_count_witx = signature_witx.params.len() + signature_witx.results.len();
+        let signature_witx = func_witx.wasm_signature();
+        let signature_witx_params = signature_witx.0;
+        let signature_witx_results = signature_witx.1;
+
+        let params_count_witx = signature_witx_params.len() + signature_witx_results.len();
         assert_eq!(
             params_count_witx,
             params_decomposed.len() + results_decomposed.len() + 1
@@ -84,7 +95,7 @@ impl RustGenerator {
         name: &str,
         params_decomposed: &[ASTypeDecomposed],
         results_decomposed: &[ASTypeDecomposed],
-        result: &ASResult,
+        o_result: &Option<ASResult>,
     ) -> Result<(), Error> {
         let results_decomposed_deref = results_decomposed
             .iter()
@@ -137,7 +148,14 @@ impl RustGenerator {
                             param.type_.as_lang(),
                         ))?;
                     }
-                    w.write_line(format!(") -> {};", result.error_type.as_lang()))?;
+                    match o_result {
+                        Some(result) => {
+                            w.write_line(format!(") -> {};", result.error_type.as_lang()))?;
+                        }
+                        None => {
+                            w.write_line(format!(");"))?;
+                        }
+                    }
                 }
                 w.write_line("}")?;
             }

@@ -17,7 +17,11 @@ convert_case = "0.5.0"
 structopt = "0.3.25"
 strum = "0.24.0"
 strum_macros = "0.24.0"
-witx = { package = "witnext", version = "0.10.0-beta3" }
+#witx = "0.9.1"
+#witx = { package = "witnext", version = "0.10.0-beta3" }
+#witx = { path = "./crates/witnext", version = "0.10.0-beta4" }
+witx = { path = "./crates/witx-0.9.1", version = "0.9.1" }
+
 
 [package.metadata.deb]
 extended-description = """\

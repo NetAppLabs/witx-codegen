@@ -24,6 +24,8 @@ pub use crate::error::*;
 pub enum OutputType {
     #[strum(serialize = "assemblyscript")]
     AssemblyScript,
+    #[strum(serialize = "typescript")]
+    TypeScript,
     Rust,
     Zig,
     Overview,
@@ -63,6 +65,9 @@ impl Default for Config {
             flags: Options {
                 skip_header: false,
                 skip_imports: false,
+                export_mode: false,
+                async_mode: false,
+                error_wrapper: false,
             },
         }
     }
@@ -78,6 +83,18 @@ pub struct Options {
     /// Do not generate a header
     #[structopt(short = "H", long)]
     skip_header: bool,
+
+    /// Export mode instead of the default Import
+    #[structopt(short = "E", long)]
+    export_mode: bool,
+
+    /// Async mode on functions
+    #[structopt(short = "A", long)]
+    async_mode: bool,
+
+    /// Error wrapper on exported calls
+    #[structopt(short = "W", long)]
+    error_wrapper: bool,
 }
 
 /// Abstract generator interface
@@ -85,7 +102,7 @@ pub trait Generator<T: Write> {
     fn generate(
         &self,
         writer: &mut T,
-        module_witx: witx::Module,
+        doc_witx: witx::Document,
         options: &Options,
     ) -> Result<(), Error>;
 }
@@ -94,7 +111,8 @@ fn get_generator<T: Write>(module: Option<&str>, output: OutputType) -> Box<dyn 
     let m = module.map(|v| v.to_string());
 
     match output {
-        OutputType::AssemblyScript => Box::new(assemblyscript::AssemblyScriptGenerator::new(m)),
+        OutputType::AssemblyScript => Box::new(assemblyscript::AssemblyScriptGenerator::new(m, false)),
+        OutputType::TypeScript => Box::new(assemblyscript::AssemblyScriptGenerator::new(m, true)),
         OutputType::Zig => Box::new(zig::ZigGenerator::new(m)),
         OutputType::Rust => Box::new(rust::RustGenerator::new(m)),
         OutputType::Overview => Box::new(overview::OverviewGenerator::new(m)),
@@ -114,9 +132,9 @@ pub fn generate(cfg: &Config) -> Result<(), Error> {
 
     let mut flags = cfg.flags.clone();
 
-    for witx_file in &cfg.witx_files {
+    //for witx_file in &cfg.witx_files {
         // Parse WITX file
-        let witx = witx::load(witx_file).unwrap();
+        let witx = witx::load(&cfg.witx_files)?;
 
         // Create generator for the specified output type
         let generator = get_generator(cfg.module_name.as_deref(), cfg.output_type);
@@ -127,7 +145,7 @@ pub fn generate(cfg: &Config) -> Result<(), Error> {
         // Generate definitions only once if we have multiple input files
         flags.skip_imports = true;
         flags.skip_header = true;
-    }
+    //}
 
     Ok(())
 }
