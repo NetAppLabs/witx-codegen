@@ -67,7 +67,7 @@ impl Default for Config {
                 skip_imports: false,
                 export_mode: false,
                 async_mode: false,
-                error_wrapper: false,
+                error_handler: false,
             },
         }
     }
@@ -92,9 +92,9 @@ pub struct Options {
     #[structopt(short = "A", long)]
     async_mode: bool,
 
-    /// Error wrapper on exported calls
-    #[structopt(short = "W", long)]
-    error_wrapper: bool,
+    /// Error handler block for exported calls
+    #[structopt(long)]
+    error_handler: bool,
 }
 
 /// Abstract generator interface

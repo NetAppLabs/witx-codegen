@@ -94,11 +94,21 @@ impl<T: Write> Generator<T> for AssemblyScriptGenerator {
             }
 
             if options.export_mode {
-                let mut errorWrapperParameter = "";
-                if options.error_wrapper {
-                    errorWrapperParameter = "errorHandler1: (err: any) => number, ";
+                let mut error_handler_parameter = "".to_string();
+                if options.error_handler {
+
+                    w.write(format!("export interface {}Handler {{\n", module_name.as_type()))?;
+                    w.write_line("getExport(name: string): WebAssembly.ExportValue")?;
+                    w.write_line("handleError(err:any): number")?;
+                    w.write_line("checkAbort(): void")?;
+                    w.write("}\n\n")?;
+
+                    //errorWrapperParameter = "errorHandler1: (err: any) => number, ";
+                    error_handler_parameter = format!("handler: {}Handler, ", module_name.as_type());
                 }
-                w.write(format!("export function add{}ToImports(imports: any, obj: {}, {}get_export: (name: string) => WebAssembly.ExportValue): void {{", module_name.as_type(), gen_module_name.as_type(), errorWrapperParameter))?;
+                //w.write(format!("export function add{}ToImports(imports: any, obj: {}, {}get_export: (name: string) => WebAssembly.ExportValue): void {{", module_name.as_type(), gen_module_name.as_type(), errorWrapperParameter))?;
+                w.write(format!("export function add{}ToImports(imports: any, obj: {}, {}): void {{", module_name.as_type(), gen_module_name.as_type(), error_handler_parameter))?;
+
                 w.eol()?;
                 w = w.new_block();
 

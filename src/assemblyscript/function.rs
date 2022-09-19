@@ -213,15 +213,15 @@ impl AssemblyScriptGenerator {
                 w.write(") {")?;
                 w.eol()?;
                 let mut w = w.new_block();
-                if options.error_wrapper {
-                    w.indent()?.write("const errorHandler2 = errorHandler1;")?.eol()?;
+                if options.error_handler {
+                    w.indent()?.write("const errorHandler2 = handler.handleError")?.eol()?;
                     w.indent()?.write("try {")?.eol()?;
                     let mut w = w.new_block();
                 }
                 if is_void_return {
-                    w.indent()?.write(format!("{} obj.{}(", await_keyword, func_witx.name.as_fn()))?;
+                    w.indent()?.indent()?.write(format!("{} obj.{}(", await_keyword, func_witx.name.as_fn()))?;
                 } else {
-                    w.indent()?.write(format!("const ret = {} obj.{}(",await_keyword, func_witx.name.as_fn()))?;
+                    w.indent()?.indent()?.write(format!("const ret = {} obj.{}(",await_keyword, func_witx.name.as_fn()))?;
                 }
                 for (i, param) in params_decomposed.iter().enumerate() {
                     let eol = if i + 1 == params_decomposed.len() {
@@ -238,17 +238,19 @@ impl AssemblyScriptGenerator {
                 w.write(");")?;
                 w.eol()?;
 
-                if !is_void_return {
-                    w.write_line(format!("return ret;"))?;
-
+                if options.error_handler {
+                    w.indent()?.write_line("handler.checkAbort();")?;
                 }
-                if options.error_wrapper {
+                if !is_void_return {
+                    w.indent()?.write_line(format!("return ret;"))?;
+                }
+                if options.error_handler {
                     w.indent()?.write("} catch(err: any) {")?.eol()?;
                     if is_void_return {
                         w.write_line("const eRet = errorHandler2(err);")?;
                         w.write_line("console.log(\"handled error\", err, eRet);")?;
                     } else {
-                        w.write_line("return errorHandler2(err);")?;
+                        w.indent()?.write_line("return errorHandler2(err);")?;
                     }
                     w.indent()?.write("}")?.eol()?;
                     w.eob()?;
